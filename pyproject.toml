@@ -1,0 +1,56 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "guest-auth"
+version = "0.1.0"
+description = "A static-allowlist invite-token gate for pre-production demos and invite-only previews (pure-ASGI middleware for Starlette / FastAPI apps)."
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "Eric Cooper" }]
+requires-python = ">=3.11"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Framework :: FastAPI",
+    "Topic :: Internet :: WWW/HTTP :: Session",
+    "Topic :: Software Development :: Libraries",
+]
+keywords = ["asgi", "starlette", "fastapi", "auth", "invite", "demo"]
+dependencies = [
+    "starlette>=0.35",
+]
+
+[project.optional-dependencies]
+# Development / test extras. FastAPI + httpx are pulled in because the
+# test suite drives the middleware through TestClient.
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+    "fastapi>=0.100",
+    "httpx>=0.27",
+]
+
+[project.urls]
+Homepage = "https://github.com/ecoop/guest-auth"
+Repository = "https://github.com/ecoop/guest-auth"
+Issues = "https://github.com/ecoop/guest-auth/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/guest_auth"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "--tb=short"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
