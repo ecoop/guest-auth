@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "guest-auth"
-version = "0.1.0"
+version = "0.1.1"
 description = "A static-allowlist invite-token gate for pre-production demos and invite-only previews (pure-ASGI middleware for Starlette / FastAPI apps)."
 readme = "README.md"
 license = { file = "LICENSE" }

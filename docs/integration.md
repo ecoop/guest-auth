@@ -9,7 +9,7 @@ How to adopt `guest-auth` in a Python ASGI application. This is the practical co
 ## Install
 
 ```bash
-pip install "guest-auth @ git+https://github.com/ecoop/guest-auth@v0.1.0"
+pip install guest-auth
 ```
 
 Requires Python 3.11+. The only runtime dependency is `starlette` (which every ASGI host already has), so the install stays lean.

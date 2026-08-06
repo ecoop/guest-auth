@@ -26,7 +26,7 @@ The value the library provides — a well-scoped ASGI middleware that publishes 
 ## Install
 
 ```bash
-pip install "guest-auth @ git+https://github.com/ecoop/guest-auth@v0.1.0"
+pip install guest-auth
 ```
 
 Requires Python 3.11+. The only runtime dependency is `starlette`, which any ASGI host already has.
@@ -118,7 +118,7 @@ CI runs on Python 3.11 and 3.12 via [GitHub Actions](.github/workflows/ci.yml).
 
 ## Versioning
 
-Currently `v0.1.0`. Semver from `v1.0.0` onward; anything before is "shipped but pre-stable API — expect breaking changes."
+Currently `v0.1.1`. Semver from `v1.0.0` onward; anything before is "shipped but pre-stable API — expect breaking changes."
 
 ## Contributing
 
@@ -127,3 +127,7 @@ Issues and pull requests welcome. For substantive changes, open an issue first �
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+---
+
+_Last updated: 2026-08-06_
