@@ -130,6 +130,60 @@ If you specifically want construction-time snapshotting instead, wrap your confi
 
 ---
 
+## Claims (role / scopes)
+
+guest-auth can attach authorization **claims** to the identity. It owns their
+*structure* and never interprets them: any string is a role, any strings are
+scopes. Whether `level5` may rebuild an index is policy, and policy is yours.
+
+Pass a `claims_resolver` — `token -> GuestClaims | None`, sync or async:
+
+```python
+from guest_auth import GuestClaims, InviteAuthMiddleware
+
+
+def resolve_claims(token: str) -> GuestClaims:
+    return GuestClaims(
+        role=resolve_role(token),                       # your store
+        scopes=tuple(resolve_allowed_domains(token)),   # your store
+    )
+
+
+app.add_middleware(
+    InviteAuthMiddleware,
+    config=settings,
+    claims_resolver=resolve_claims,
+)
+```
+
+Downstream, `get_current_guest().role` / `.scopes` carry the result.
+
+Three rules worth internalising before you wire one up:
+
+### `role=None` means *unresolved*, not *unprivileged*
+
+You get `None` when no resolver is configured, when the resolver had nothing for
+the token, **and when the resolver failed**. A policy layer must map `None` to its
+own floor explicitly. Reading `None` as a permissive default fails open during
+exactly the outage that produced it.
+
+### Resolution failure is soft
+
+If the resolver raises, guest-auth logs it and serves the request with empty
+claims. The token is still valid — the gate just doesn't know what it may do.
+A claim store hiccup degrades authorization, it never 401s an invited tester.
+This is deliberate, and it is why the rule above matters.
+
+### Caching is yours
+
+The resolver runs on every authenticated request. If it reads a bucket, a file,
+or a database, cache inside the resolver — guest-auth has no opinion about
+invalidation and won't grow one. A sync resolver runs in Starlette's threadpool,
+so a blocking read costs that request its latency but never stalls the event
+loop for everyone else.
+
+---
+
 ## Constructor reference
 
 ### `InviteAuthMiddleware`
@@ -140,6 +194,7 @@ InviteAuthMiddleware(
     config,                           # object exposing demo_mode + invite_tokens
     *,
     welcome_html: str | None = None,  # pre-rendered 401 / welcome body
+    claims_resolver: ClaimsResolver | None = None,  # token -> GuestClaims
 )
 ```
 
@@ -148,6 +203,7 @@ InviteAuthMiddleware(
 | `app` | `ASGIApp` | Downstream app the middleware wraps. Populated automatically when using `app.add_middleware()`. |
 | `config` | `GuestAuthConfig` | Any object with `demo_mode: bool` and `invite_tokens: Mapping[str, str]`. Attribute-read per request. |
 | `welcome_html` | `str \| None` | Pre-rendered HTML body injected verbatim into the library's page chrome. `None` uses a minimal built-in fallback. |
+| `claims_resolver` | `ClaimsResolver \| None` | `token -> GuestClaims \| None`, sync or async. Called once per authenticated request to attach `role` / `scopes`. `None` means every identity carries no claims. See [Claims](#claims-role--scopes). |
 
 ### `PathScopedContextVarMiddleware`
 
@@ -172,9 +228,26 @@ PathScopedContextVarMiddleware(
 ```python
 @dataclass(frozen=True)
 class GuestIdentity:
-    token: str        # the credential itself
-    recipient: str    # human-readable label from the allowlist
+    token: str                          # the credential itself
+    recipient: str                      # human-readable label from the allowlist
+    role: str | None = None             # claim; None means UNRESOLVED
+    scopes: tuple[str, ...] | None = None   # claim; None means no scopes claim
 ```
+
+Frozen *and hashable* — consumers key per-recipient counters off it. That is why
+`scopes` is a `tuple` and not a `list`: one mutable field turns `hash()` into a
+`TypeError`, and it would only fire on requests that actually carry claims.
+
+### `GuestClaims`
+
+```python
+@dataclass(frozen=True)
+class GuestClaims:
+    role: str | None = None
+    scopes: tuple[str, ...] | None = None
+```
+
+What a resolver returns. Returning `None` instead is equivalent to `GuestClaims()`.
 
 ### Module-level constants + functions
 
@@ -183,6 +256,7 @@ class GuestIdentity:
 | `COOKIE_NAME = "guest_session"` | Cookie the middleware sets and reads. |
 | `COOKIE_MAX_AGE = 60 * 60 * 24 * 30` | 30 days, in seconds. Convenience lifetime, not token expiry. |
 | `get_current_guest() -> GuestIdentity \| None` | Read the current request's identity, or `None` outside a request or when demo mode is off. |
+| `ClaimsResolver` | Type alias for the resolver callable: `Callable[[str], GuestClaims \| None \| Awaitable[...]]`. |
 
 ---
 

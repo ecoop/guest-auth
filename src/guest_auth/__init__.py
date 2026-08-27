@@ -15,7 +15,10 @@ Public surface (re-exported here so callers only import from
     - ``InviteAuthMiddleware`` — the ASGI middleware class
     - ``GuestAuthConfig`` — Protocol the middleware's ``config`` arg
       must satisfy (``demo_mode: bool``, ``invite_tokens: Mapping``)
-    - ``GuestIdentity`` — the resolved (token, recipient) pair
+    - ``GuestIdentity`` — the resolved identity: (token, recipient)
+      plus the optional (role, scopes) claims
+    - ``GuestClaims`` — what a ``claims_resolver`` returns
+    - ``ClaimsResolver`` — the resolver callable's type
     - ``get_current_guest()`` — read the current request's identity
     - ``COOKIE_NAME`` / ``COOKIE_MAX_AGE`` — cookie contract for tests
     - ``PathScopedContextVarMiddleware`` — generic sibling that
@@ -32,7 +35,12 @@ the middleware serves it verbatim.
 """
 
 from guest_auth.contextvar_middleware import PathScopedContextVarMiddleware
-from guest_auth.identity import GuestIdentity, get_current_guest
+from guest_auth.identity import (
+    ClaimsResolver,
+    GuestClaims,
+    GuestIdentity,
+    get_current_guest,
+)
 from guest_auth.invite_tokens import mint_token
 from guest_auth.middleware import (
     COOKIE_MAX_AGE,
@@ -44,7 +52,9 @@ from guest_auth.middleware import (
 __all__ = [
     "COOKIE_MAX_AGE",
     "COOKIE_NAME",
+    "ClaimsResolver",
     "GuestAuthConfig",
+    "GuestClaims",
     "GuestIdentity",
     "InviteAuthMiddleware",
     "PathScopedContextVarMiddleware",

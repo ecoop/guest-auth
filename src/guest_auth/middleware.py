@@ -45,21 +45,48 @@ Welcome-page injection:
     surface passes one in. This keeps the library free of any markdown
     or filesystem dependencies.
 
+Claims resolution:
+    An optional ``claims_resolver`` maps the authenticated token to a
+    ``GuestClaims(role, scopes)``, which rides along on the identity.
+    guest-auth owns the *structure* of a claim and never interprets it —
+    any string is a role, any strings are scopes. Whether a role may do
+    a given thing is policy, and policy belongs to the host app.
+
+    The resolver may be sync or async. A sync one runs in Starlette's
+    threadpool, so a resolver that reads a bucket or a database does not
+    block the event loop. Resolution is per-request by design; caching
+    (and its invalidation) is the resolver's business, not the gate's.
+
+    Resolution failure is soft: if the resolver raises, the exception is
+    logged and the request proceeds with an identity whose claims are
+    ``None``. A transient store outage degrades to "no claims", never to
+    "no identity" — and never to elevated claims. The corollary the host
+    must honour is that ``role=None`` means *unresolved*, not
+    *unprivileged*; a policy layer that reads ``None`` as a permissive
+    default would fail open exactly when its claim store is down.
+
 Out of scope: token expiry/rotation, signed cookies,
 multi-token-per-recipient, an admin UI. The cookie ``max_age`` below is a
 convenience lifetime, not token expiry — revoking access still means
 editing the allowlist and redeploying.
 """
 
+import inspect
 import logging
 from collections.abc import Mapping
 from typing import Protocol
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, RedirectResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from guest_auth.identity import GuestIdentity, _invite_identity
+from guest_auth.identity import (
+    ClaimsResolver,
+    GuestClaims,
+    GuestIdentity,
+    _invite_identity,
+)
 
 _log = logging.getLogger(__name__)
 
@@ -161,7 +188,8 @@ class InviteAuthMiddleware:
       - ``?token=X`` present and in the allowlist → set the
         ``guest_session`` cookie and 302-redirect to the clean URL.
       - ``?token=X`` present but unknown → 401 friendly page.
-      - Valid ``guest_session`` cookie → set the identity ContextVar
+      - Valid ``guest_session`` cookie → resolve claims (if a
+        ``claims_resolver`` was supplied), set the identity ContextVar
         and serve the request normally.
       - No / invalid cookie → 401 friendly page.
 
@@ -174,6 +202,12 @@ class InviteAuthMiddleware:
             page. Injected verbatim into the library's page chrome.
             ``None`` uses a minimal built-in fallback; hosts that want
             a real welcome message pass their own rendered HTML in.
+        claims_resolver: Optional ``token -> GuestClaims | None``, sync
+            or async, called once per authenticated request to attach
+            ``role`` / ``scopes`` to the identity. Omit it and every
+            identity carries ``role=None, scopes=None`` — which is
+            exactly the pre-claims behaviour. If it raises, the failure
+            is logged and the request proceeds without claims.
     """
 
     def __init__(
@@ -182,9 +216,18 @@ class InviteAuthMiddleware:
         config: GuestAuthConfig,
         *,
         welcome_html: str | None = None,
+        claims_resolver: ClaimsResolver | None = None,
     ) -> None:
         self.app = app
         self._config = config
+        self._claims_resolver = claims_resolver
+        # Decide sync-vs-async once, here, rather than inspecting the
+        # resolver on every request. A callable object carries its
+        # async-ness on ``__call__``, not on itself, so check both.
+        self._resolver_is_async = claims_resolver is not None and (
+            inspect.iscoroutinefunction(claims_resolver)
+            or inspect.iscoroutinefunction(type(claims_resolver).__call__)
+        )
         body = welcome_html if welcome_html is not None else _FALLBACK_BODY
         # Render the full page once at construction: neither the chrome
         # nor the host-supplied body changes per-request, so there is
@@ -199,6 +242,27 @@ class InviteAuthMiddleware:
         work" page if the token or cookie is rejected.
         """
         return HTMLResponse(content=self._page, status_code=401)
+
+    async def _resolve_claims(self, token: str) -> GuestClaims:
+        """Resolve claims for ``token``; empty claims on absence or failure.
+
+        Fails soft. A resolver that raises (a bucket read timing out, a
+        database refusing a connection) must not turn an authenticated
+        request into a 401 — the token is still valid, we just don't know
+        what it may do. Callers see ``role=None`` and are required to
+        treat that as *unresolved*, i.e. to fall back to their own floor.
+        """
+        if self._claims_resolver is None:
+            return GuestClaims()
+        try:
+            if self._resolver_is_async:
+                claims = await self._claims_resolver(token)
+            else:
+                claims = await run_in_threadpool(self._claims_resolver, token)
+        except Exception:  # noqa: BLE001 — a broken resolver must not 401
+            _log.exception("guest-auth: claims resolver failed; continuing without claims")
+            return GuestClaims()
+        return claims if claims is not None else GuestClaims()
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         # Only gate HTTP requests; let lifespan/websocket pass untouched.
@@ -233,8 +297,14 @@ class InviteAuthMiddleware:
         cookie_token = request.cookies.get(COOKIE_NAME)
         recipient = allowlist.get(cookie_token) if cookie_token else None
         if recipient is not None:
+            claims = await self._resolve_claims(cookie_token)
             reset = _invite_identity.set(
-                GuestIdentity(token=cookie_token, recipient=recipient)
+                GuestIdentity(
+                    token=cookie_token,
+                    recipient=recipient,
+                    role=claims.role,
+                    scopes=claims.scopes,
+                )
             )
             try:
                 await self.app(scope, receive, send)
