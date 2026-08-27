@@ -174,34 +174,50 @@ claims. The token is still valid — the gate just doesn't know what it may do.
 A claim store hiccup degrades authorization, it never 401s an invited tester.
 This is deliberate, and it is why the rule above matters.
 
-### A `None` scopes claim must not mean "unrestricted" in your app
+### `None` scopes must never widen access
 
-This is the sharp edge of the two rules above, and it has already bitten once in
-review. If your resolver's underlying function returns `None` to mean
-*unrestricted* — a perfectly reasonable convention, and the one Rulebook's
-`resolve_allowed_domains` uses for its `*` grant — then feeding it straight
-through inverts the privilege direction:
+guest-auth produces `scopes=None` for *unresolved* — no resolver, no claim for
+this token, **or the resolver raised**. A policy layer must therefore fail
+**closed** on `None`. If it treats `None` as "no restrictions apply", a claim
+store outage silently grants everything, because the outage path and the
+no-restriction path are the same value.
 
-```python
-# WRONG — a claim-store outage grants everything to everyone.
-def resolve_claims(token):
-    return GuestClaims(scopes=resolve_allowed_domains(token))  # None = "all"
-```
-
-guest-auth also produces `scopes=None` when the resolver *fails*. So the outage
-path and the superuser path become indistinguishable, and the app resolves the
-ambiguity in the permissive direction. Carry "unrestricted" as an explicit
-in-band value instead, and translate at the boundary:
+The trap is that "`None` means unrestricted" is a natural convention to have
+already, independently, inside a scope resolver. If yours does, do not feed it
+straight through:
 
 ```python
-# RIGHT — "unrestricted" is a scope string your policy layer knows about.
+# WRONG — a claim-store outage becomes a grant.
 def resolve_claims(token):
-    domains = resolve_allowed_domains(token)
-    return GuestClaims(scopes=("*",) if domains is None else tuple(domains))
+    return GuestClaims(scopes=resolve_domains(token))   # None here = "all"
 ```
 
-Now `None` means only what guest-auth says it means — unresolved — and your
-policy layer can fail closed on it.
+Translate at the boundary so `None` retains exactly one meaning — guest-auth's.
+
+### Enumerate scopes; don't ship a wildcard
+
+The tempting boundary translation is a wildcard — `scopes=("*",)` for the
+unrestricted case — and it is worth not reaching for. A wildcard grant is
+evaluated against whatever exists at *request* time, so every resource added
+later is granted retroactively to everyone already holding it. Nobody re-reviews
+a stored grant when a new resource ships, which is exactly when the review would
+matter.
+
+```python
+# Enumerate: the grant means what it meant on the day it was written.
+def resolve_claims(token):
+    return GuestClaims(
+        role=resolve_role(token),               # a concrete role, never None
+        scopes=tuple(resolve_domains(token)),   # a concrete list, never a wildcard
+    )
+```
+
+That costs a grant-widening step when a resource is added — which is the point.
+The write is where the access decision belongs, not the read.
+
+guest-auth has no opinion on scope *meaning* and will happily carry `"*"` as an
+opaque string if you decide otherwise. The recommendation is about what your
+policy layer should be asked to interpret.
 
 ### Key per-recipient counters on `.token`, not the identity
 
