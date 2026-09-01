@@ -25,3 +25,8 @@ env/
 .idea/
 *.swp
 .DS_Store
+
+# Secrets — never commit these to a public repo.
+.env
+.env.*
+!.env.example
