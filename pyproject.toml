@@ -26,6 +26,11 @@ dependencies = [
     "starlette>=0.35",
 ]
 
+[project.scripts]
+# Ops helper: mint invite tokens for a names file. Stdlib only — installing
+# guest-auth adds the command without adding a dependency.
+guest-auth-tokens = "guest_auth._invite_cli:main"
+
 [project.optional-dependencies]
 # Development / test extras. FastAPI + httpx are pulled in because the
 # test suite drives the middleware through TestClient.

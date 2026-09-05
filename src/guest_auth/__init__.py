@@ -20,6 +20,10 @@ Public surface (re-exported here so callers only import from
     - ``COOKIE_NAME`` / ``COOKIE_MAX_AGE`` — cookie contract for tests
     - ``PathScopedContextVarMiddleware`` — generic sibling that
       publishes a path-parsed value onto a caller-supplied ContextVar
+    - ``mint_token()`` — mint one opaque invite token. The rest of the
+      generator (names file in, tokens + links out) lives in
+      ``guest_auth.invite_tokens`` and behind the ``guest-auth-tokens``
+      command, so importing the middleware pulls in no CLI machinery.
 
 The package takes no config from the environment and imports nothing
 from any markdown / filesystem library. The host constructs the
@@ -29,6 +33,7 @@ the middleware serves it verbatim.
 
 from guest_auth.contextvar_middleware import PathScopedContextVarMiddleware
 from guest_auth.identity import GuestIdentity, get_current_guest
+from guest_auth.invite_tokens import mint_token
 from guest_auth.middleware import (
     COOKIE_MAX_AGE,
     COOKIE_NAME,
@@ -44,4 +49,5 @@ __all__ = [
     "InviteAuthMiddleware",
     "PathScopedContextVarMiddleware",
     "get_current_guest",
+    "mint_token",
 ]
