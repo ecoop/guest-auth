@@ -17,6 +17,7 @@ Naming a library `*-auth` invites expectations it doesn't meet. To be explicit:
 - **No password handling, no MFA, no OAuth / OIDC, no account lifecycle.** The credential is an opaque token you generate and hand to a tester.
 - **No token rotation, expiry, revocation-list, or signed cookies.** The cookie is httpOnly + Secure + SameSite=Lax with a 30-day convenience lifetime; revoking access means removing the token from the allowlist and redeploying.
 - **No rate limiting.** Compose one separately (e.g. [`llm-guardrails`](https://github.com/ecoop/llm-guardrails) ships an IP rate limiter).
+- **No policy engine.** The identity can carry `role` / `scopes` claims (see below), but guest-auth never interprets or enforces them — no capability vocabulary, no role→permission bundles, no `require_x` decorator. That's authz *over* the claims and it lives in your app.
 - **Not audited for adversarial threat models.** This is a gate to keep pre-production URLs off the open web and attribute per-tester activity, not a substitute for real identity infrastructure. If you're gating production PII or payment flows, use something else.
 
 The value the library provides — a well-scoped ASGI middleware that publishes a per-request identity ContextVar that reaches sync endpoints — is genuinely useful and hard to get right (the "pure-ASGI vs `BaseHTTPMiddleware`" trap is subtle). Everything above is deferred, not planned.
@@ -93,9 +94,34 @@ Both attributes are read at request time, so mutating a live `config` instance (
 
 ### `GuestIdentity` + `get_current_guest()`
 
-On a successful cookie match, the middleware sets a request-scoped `ContextVar` with `GuestIdentity(token=..., recipient=...)`. Anywhere downstream — sync or async, including code paths in Starlette's threadpool — `get_current_guest()` returns it or `None`.
+On a successful cookie match, the middleware sets a request-scoped `ContextVar` with `GuestIdentity(token=..., recipient=..., role=..., scopes=...)`. Anywhere downstream — sync or async, including code paths in Starlette's threadpool — `get_current_guest()` returns it or `None`.
 
 Because the middleware is pure-ASGI (not `BaseHTTPMiddleware`), the `ContextVar` survives into the threadpool that runs `def` (sync) endpoints. See the [integration doc](docs/integration.md#gotchas) for why this matters.
+
+### Claims: `role` and `scopes`
+
+Optionally, the identity carries authorization claims. guest-auth defines their
+**structure** and never their **meaning** — any string is a role, any strings are
+scopes:
+
+```python
+from guest_auth import GuestClaims
+
+def resolve_claims(token: str) -> GuestClaims:
+    return GuestClaims(role="level5", scopes=("rules", "faq"))  # your store
+
+app.add_middleware(
+    InviteAuthMiddleware, config=settings, claims_resolver=resolve_claims
+)
+```
+
+The resolver may be sync or async; a sync one runs in Starlette's threadpool, so
+a resolver that reads a bucket doesn't stall the event loop. Caching is the
+resolver's job.
+
+Two contracts to know: resolution failure is **soft** (log + empty claims, never
+a 401), and consequently `role=None` means **unresolved, not unprivileged** — map
+it to your own floor explicitly. Full detail in the [integration doc](docs/integration.md#claims-role--scopes).
 
 ### `PathScopedContextVarMiddleware` (bonus)
 
@@ -153,7 +179,7 @@ CI runs on Python 3.11 and 3.12 via [GitHub Actions](.github/workflows/ci.yml).
 
 ## Versioning
 
-Currently `v0.1.1`. Semver from `v1.0.0` onward; anything before is "shipped but pre-stable API — expect breaking changes."
+Currently `v0.2.0`. Semver from `v1.0.0` onward; anything before is "shipped but pre-stable API — expect breaking changes."
 
 ## Contributing
 
