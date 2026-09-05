@@ -103,6 +103,41 @@ An adjacent generic that ships in the same package: match a regex against `scope
 
 ---
 
+## Minting invite tokens
+
+Installing the package also installs `guest-auth-tokens`, a small offline helper
+for the chore every app behind this middleware repeats: turn a list of names into
+tokens and links you can send people. Stdlib only — it adds no dependency.
+
+Write one recipient per line (an inline `#` adds a private note that stays local):
+
+```
+Alice
+Mike        # met at worlds
+Bob Smith
+```
+
+Then:
+
+```bash
+guest-auth-tokens gen --names secrets/guests.txt --out secrets/tokens.json --links secrets/links.md --base-url https://your-app.example.com
+```
+
+That writes a `{token: label}` JSON — feed it to `config.invite_tokens` however
+your app prefers — and a markdown file of shareable invite links.
+
+Re-running is **merge-preserving**: a name that already has a token keeps it, so
+links you've already sent never break. A name you *remove* is reported rather
+than revoked — its token stays valid until you delete it by hand, because
+revoking someone's access shouldn't be a side effect of regenerating a file.
+
+Both output files contain working credentials. The tool checks whether they're
+covered by a `.gitignore` and warns loudly if not.
+
+Note what this deliberately isn't: there's no live allowlist management, no
+storage backend, and no cloud dependency. Where your app keeps its allowlist and
+how it refreshes it stays yours.
+
 ## Development
 
 ```bash
@@ -130,4 +165,4 @@ MIT. See [LICENSE](LICENSE).
 
 ---
 
-_Last updated: 2026-08-06_
+_Last updated: 2026-09-05_
