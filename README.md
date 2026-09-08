@@ -1,12 +1,19 @@
 # guest-auth
 
+[![PyPI](https://img.shields.io/pypi/v/guest-auth)](https://pypi.org/project/guest-auth/)
+[![CI](https://github.com/ecoop/guest-auth/actions/workflows/ci.yml/badge.svg)](https://github.com/ecoop/guest-auth/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/pypi/pyversions/guest-auth)](https://pypi.org/project/guest-auth/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 **Not a replacement for real authentication.** A static-allowlist invite-token gate for pre-production demos and invite-only previews. Pure-ASGI middleware that plugs into any Starlette / FastAPI app in ~5 lines.
 
 Give a tester a link like `https://your-app.example.com/?token=tok_abc123`; the middleware validates the token against an allowlist you own, exchanges it for an `httpOnly` cookie, and attaches an identity (`token` + human-readable `recipient` label) to the request via a `ContextVar` that reaches sync endpoints in the threadpool as well.
 
-The library was extracted from [Pitchcraft](https://github.com/ecoop/pitchcraft) and is consumed there in production; [Rulebook](https://github.com/ecoop/rulebook) and JobScout are scheduled to adopt it.
+It also ships `guest-auth-tokens`, a small offline CLI that turns a list of names into tokens and shareable invite links — [see below](#minting-invite-tokens).
 
-**Adopting this in a new app?** See [`docs/integration.md`](docs/integration.md) for the DI pattern, the `app_state.py` template, gotchas (init order, pure-ASGI vs `BaseHTTPMiddleware`, ContextVar propagation), and the constructor reference.
+Extracted from a production app and now used by three: Pitchcraft and JobScout (both private) and [Rulebook](https://github.com/ecoop/rulebook), which is public and builds a full RBAC layer — capability vocabulary, role bundles, `require_capability` — on top of this library's identity and claims.
+
+**Adopting this in a new app?** See [`docs/integration.md`](docs/integration.md) for the dependency-injection pattern, the gotchas (init order, pure-ASGI vs `BaseHTTPMiddleware`, ContextVar propagation), claims resolution, and the constructor reference.
 
 ---
 
@@ -16,7 +23,7 @@ Naming a library `*-auth` invites expectations it doesn't meet. To be explicit:
 
 - **No password handling, no MFA, no OAuth / OIDC, no account lifecycle.** The credential is an opaque token you generate and hand to a tester.
 - **No token rotation, expiry, revocation-list, or signed cookies.** The cookie is httpOnly + Secure + SameSite=Lax with a 30-day convenience lifetime; revoking access means removing the token from the allowlist and redeploying.
-- **No rate limiting.** Compose one separately (e.g. [`llm-guardrails`](https://github.com/ecoop/llm-guardrails) ships an IP rate limiter).
+- **No rate limiting.** Compose one separately (e.g. [`llm-cost-governor`](https://github.com/ecoop/llm-cost-governor) ships an IP rate limiter).
 - **No policy engine.** The identity can carry `role` / `scopes` claims (see below), but guest-auth never interprets or enforces them — no capability vocabulary, no role→permission bundles, no `require_x` decorator. That's authz *over* the claims and it lives in your app.
 - **Not audited for adversarial threat models.** This is a gate to keep pre-production URLs off the open web and attribute per-tester activity, not a substitute for real identity infrastructure. If you're gating production PII or payment flows, use something else.
 
@@ -191,4 +198,4 @@ MIT. See [LICENSE](LICENSE).
 
 ---
 
-_Last updated: 2026-09-05_
+_Last updated: 2026-09-08_
