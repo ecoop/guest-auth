@@ -186,7 +186,7 @@ CI runs on Python 3.11 through 3.14 via [GitHub Actions](.github/workflows/ci.ym
 
 ## Versioning
 
-Currently `v0.2.0`. Semver from `v1.0.0` onward; anything before is "shipped but pre-stable API — expect breaking changes."
+Currently `v0.2.1`. Semver from `v1.0.0` onward; anything before is "shipped but pre-stable API — expect breaking changes."
 
 ## Contributing
 
