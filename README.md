@@ -182,7 +182,7 @@ pytest
 ruff check src tests
 ```
 
-CI runs on Python 3.11 and 3.12 via [GitHub Actions](.github/workflows/ci.yml).
+CI runs on Python 3.11 through 3.14 via [GitHub Actions](.github/workflows/ci.yml).
 
 ## Versioning
 
