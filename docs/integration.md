@@ -2,7 +2,7 @@
 
 How to adopt `guest-auth` in a Python ASGI application. This is the practical companion to the [README](../README.md) — the README explains *what* the library does; this doc explains *how* to wire it into your app.
 
-**Reference implementation:** [Pitchcraft](https://github.com/ecoop/pitchcraft) consumes this library in production. Its [`app_state.py`](https://github.com/ecoop/pitchcraft/blob/main/app_state.py) is the canonical adoption pattern; the file pointers throughout this doc are all in that repo.
+**Working examples:** [Rulebook](https://github.com/ecoop/rulebook) is public and consumes this library in production — see [Reference implementations](#reference-implementations) below for the files worth reading. Pitchcraft and JobScout also run it, but those repos are private, so every pattern this doc relies on is written out here in full rather than linked.
 
 ---
 
@@ -26,7 +26,7 @@ The host app is responsible for:
 2. Constructing the middleware at app-factory time with those values.
 3. Exposing anything downstream needs (e.g. `get_current_guest`) through a facade module rather than reaching into `guest_auth` directly if you'd like to keep the seam narrow.
 
-Pitchcraft's [`app_state.py`](https://github.com/ecoop/pitchcraft/blob/main/app_state.py) is the working example for the broader "singleton facade" pattern. The auth-specific slice looks like this:
+The "singleton facade" pattern below is complete as written — copy it. It suits a multi-file app where routers, observability, and the app-factory all need the same initialised state. If your API is a single module, you don't need the facade at all: construct the middleware inline, the way [Rulebook's `api/main.py`](https://github.com/ecoop/rulebook/blob/main/api/main.py) does.
 
 ```python
 # app_state.py — the singleton facade
@@ -313,16 +313,18 @@ What a resolver returns. Returning `None` instead is equivalent to `GuestClaims(
 
 ---
 
-## Reference implementation: Pitchcraft
+## Reference implementations
 
-Files worth skimming, in priority order:
+[Rulebook](https://github.com/ecoop/rulebook) is the public one, and the most complete: it builds a full RBAC layer on this library's identity and claims. Files worth skimming, in priority order:
 
-1. [`app_state.py`](https://github.com/ecoop/pitchcraft/blob/main/app_state.py) — singleton facade pattern.
-2. [`api/main.py`](https://github.com/ecoop/pitchcraft/blob/main/api/main.py) — how the middleware slots into the FastAPI app-factory.
-3. [`api/observability.py`](https://github.com/ecoop/pitchcraft/blob/main/api/observability.py) — a consumer of `get_current_guest()` in the request path.
+1. [`api/main.py`](https://github.com/ecoop/rulebook/blob/main/api/main.py) — the middleware wired into a single-module FastAPI app.
+2. [`src/rulebook/tokens.py`](https://github.com/ecoop/rulebook/blob/main/src/rulebook/tokens.py) — supplying `config.invite_tokens` from a seed plus a refreshed remote object, the shape a `claims_resolver` also takes.
+3. [`src/rulebook/roles.py`](https://github.com/ecoop/rulebook/blob/main/src/rulebook/roles.py) — a policy engine over `get_current_guest()`: capability vocabulary, role bundles, and a `require_capability` FastAPI dependency. This is the layer guest-auth deliberately does *not* provide.
+
+Pitchcraft and JobScout also consume the library in production, but both repos are private — Pitchcraft is where the multi-file `app_state.py` facade above comes from.
 
 ---
 
 ## Getting help
 
-For questions on the adoption pattern that aren't covered here: open an issue on this repo, or point at the Pitchcraft reference files above — they're the working ground truth.
+For questions on the adoption pattern that aren't covered here: open an issue on this repo, or read the Rulebook files above — they're working ground truth you can actually clone.
